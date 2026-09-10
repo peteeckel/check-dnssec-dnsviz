@@ -4,9 +4,10 @@ import argparse
 import json
 from pynag.Plugins import PluginHelper, ok, critical, warning, unknown
 
-from subprocess import Popen, PIPE
+import subprocess
 
 ZONE_STATUS_OK = ("NOERROR",)
+PROOF_STATUS_OK = ("VALID",)
 RRSIG_STATUS_OK = ("VALID",)
 DS_STATUS_OK = ("VALID",)
 DELEGATION_STATUS_OK = ("SECURE",)
@@ -51,17 +52,77 @@ class DNSviz:
             )
             self.plugin.add_status(critical)
 
-    def _check_nodata_proof(self, rrsig):
-        pass
+    def _check_proof(self, proof, query):
+        status = proof.get("status")
+
+        if status not in PROOF_STATUS_OK:
+            self.plugin.add_summary(f'NSEC/NSEC3 status of query "{query}" is {status}')
+            self.plugin.add_status(critical)
+
+    def get_dnsviz_results(self):
+        dnsviz_executable = "/bin/dnsviz"
+        probe_arguments = [
+            "probe",
+            self.zone,
+            "-E",
+        ]
+        if self.authoritative:
+            probe_arguments.append("-A")
+        elif self.resolver is not None:
+            probe_arguments.append("-s")
+            probe_arguments.append(self.resolver)
+
+        probe = subprocess.run(
+            [dnsviz_executable, *probe_arguments],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode:
+            self.plugin.add_status(unknown)
+            self.plugin.set_long_output(probe.stderr)
+            self.plugin.exit()
+
+        grok = subprocess.run(
+            [dnsviz_executable, "grok"],
+            capture_output=True,
+            text=True,
+            input=probe.stdout,
+        )
+        if grok.returncode:
+            self.plugin.add_status(unknown)
+            self.plugin.set_long_output(grok.stderr)
+            self.plugin.exit()
+
+        return json.loads(grok.stdout)
 
     def check_dnssec(self):
         if self.debug:
             print(f'Checking DNSSEC status for zone "{self.zone}"')
 
-        result = get_dnsviz_results(zone=self.zone, resolver=self.resolver, authoritative=self.authoritative)
+        result = self.get_dnsviz_results()
 
         for zone_name, zone_result in result.items():
             self.check_zone_result(zone_name, zone_result)
+
+    def check_zone_result(self, zone_name, zone_result):
+        if self.debug:
+            print(f'Checking results for zone "{zone_name}"')
+
+        if (status := zone_result.get("status")) not in ZONE_STATUS_OK:
+            self.plugin.add_summary(f'Status of zone "{zone_name}" is {status}')
+            self.plugin.add_status(critical)
+            return
+
+        check_queries = True
+
+        if zone_name != ".":
+            check_queries = self.check_delegation_result(
+                zone_name, zone_result.get("delegation")
+            )
+
+        if check_queries:
+            for query, query_result in zone_result.get("queries", {}).items():
+                self.check_query_result(query, query_result)
 
     def check_query_result(self, query, query_result):
         if self.debug:
@@ -73,35 +134,24 @@ class DNSviz:
                     self._check_rrsig(rrsig, query)
             else:
                 self.plugin.add_summary(f'Answer for query "{query}" is unsigned')
-                self.plugin.add_status(warning)
+                self.plugin.add_status(critical)
 
-        elif nodata := query_result.get("nodata"):
+        elif nodata := query_result.get("nodata", query_result.get("nxdomain")):
             if proofs := nodata[0].get("proof"):
-                for proof in proofs:
-                    self._check_nodata_proof(proof)
+                self._check_proof(proofs[0], query)
             else:
                 self.plugin.add_summary(
-                    f'NODATA answer for query "{query}" does not provide proof of non-existence'
+                    f'NODATA/NXDOMAIN answer for query "{query}" does not provide proof of non-existence'
                 )
-                self.plugin.add_status(warning)
-
-        elif nxdomain := query_result.get("nxdomain"):
-            if proofs := nxdomain[0].get("proof"):
-                for proof in proofs:
-                    self._check_nodata_proof(proof)
-            else:
-                self.plugin.add_summary(
-                    f'NXDOMAIN answer for query "{query}" does not provide proof of non-existence'
-                )
-                self.plugin.add_status(warning)
+                self.plugin.add_status(critical)
 
         else:
             self.plugin.add_summary(
-                f'Neither answer nor NODATA nor NXDOMAIN received for query "{query}"'
+                f'Neither answer nor NODATA/NXDOMAIN received for query "{query}"'
             )
             self.plugin.add_status(unknown)
 
-    def check_delegation(self, zone_name, delegation_result):
+    def check_delegation_result(self, zone_name, delegation_result):
         if self.debug:
             print(f'Checking delegation for zone "{zone_name}"')
 
@@ -127,56 +177,16 @@ class DNSviz:
                 for error in errors:
                     self.plugin.add_summary(error.get("description"))
 
+        else:
+            if proofs := delegation_result.get("insecurity_proof"):
+                self._check_proof(proofs[0], proofs[0].get("id"))
+            else:
+                self.plugin.add_summary(
+                    f'Delegation for zone "{zone_name}" does not provide proof of insecurity'
+                )
+                self.plugin.add_status(critical)
+
         return status in DELEGATION_STATUS_OK
-
-    def check_zone_result(self, zone_name, zone_result):
-        if self.debug:
-            print(f'Checking results for zone "{zone_name}"')
-
-        if (status := zone_result.get("status")) not in ZONE_STATUS_OK:
-            self.plugin.add_summary(f'Status of zone "{zone_name}" is {status}')
-            self.plugin.add_status(critical)
-
-        check_queries = True
-
-        if zone_name != ".":
-            check_queries = self.check_delegation(
-                zone_name, zone_result.get("delegation")
-            )
-
-        if check_queries:
-            for query, query_result in zone_result.get("queries", {}).items():
-                self.check_query_result(query, query_result)
-
-
-def get_dnsviz_results(zone, resolver=None, authoritative=False):
-    dnsviz_executable = "/bin/dnsviz"
-    probe_arguments = [
-        "probe",
-        zone,
-        "-E",
-    ]
-    if authoritative:
-        probe_arguments.append("-A")
-    elif resolver is not None:
-        probe_arguments.append("-s")
-        probe_arguments.append(resolver)
-
-    probe = Popen(
-        [dnsviz_executable, *probe_arguments],
-        stdout=PIPE,
-        stdin=PIPE,
-        stderr=PIPE,
-        text=True,
-    )
-    probe_data = probe.communicate()[0]
-
-    grok = Popen(
-        [dnsviz_executable, "grok"], stdout=PIPE, stdin=PIPE, stderr=PIPE, text=True
-    )
-    grok_data = grok.communicate(input=probe_data)[0]
-
-    return json.loads(grok_data)
 
 
 def main():
