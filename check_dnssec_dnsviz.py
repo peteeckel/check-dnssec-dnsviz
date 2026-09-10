@@ -4,8 +4,6 @@ import argparse
 import json
 from pynag.Plugins import PluginHelper, ok, critical, warning, unknown
 
-# from datetime import datetime
-
 from subprocess import Popen, PIPE
 
 ZONE_STATUS_OK = ("NOERROR",)
@@ -46,8 +44,6 @@ class DNSviz:
     def _check_rrsig(self, rrsig, query, proof=None):
         status = rrsig.get("status")
         key_tag = rrsig.get("key_tag")
-        # inception = datetime.strptime(rrsig.get("inception"), "%Y-%m-%d %H:%M:%S %Z")
-        # expiration = datetime.strptime(rrsig.get("expiration"), "%Y-%m-%d %H:%M:%S %Z")
 
         if status not in RRSIG_STATUS_OK:
             self.plugin.add_summary(
@@ -136,8 +132,6 @@ class DNSviz:
     def check_zone_result(self, zone_name, zone_result):
         if self.debug:
             print(f'Checking results for zone "{zone_name}"')
-
-        # zone_level = 0 if zone_name == "." else len(zone_name.split("."))-1
 
         if (status := zone_result.get("status")) not in ZONE_STATUS_OK:
             self.plugin.add_summary(f'Status of zone "{zone_name}" is {status}')
