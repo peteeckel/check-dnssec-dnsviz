@@ -42,22 +42,26 @@ class DNSviz:
     def debug(self):
         return self._debug
 
-    def _check_rrsig(self, rrsig, query, proof=None):
-        status = rrsig.get("status")
-        key_tag = rrsig.get("key_tag")
+    def _check_rrsig(self, rrsigs, query):
+        valid_rrsigs = [rrsig for rrsig in rrsigs if rrsig.get("status") in RRSIG_STATUS_OK]
 
-        if status not in RRSIG_STATUS_OK:
-            self.plugin.add_summary(
-                f'RRSIG status of query "{query}" is {status} (RRSIG key {key_tag})'
-            )
+        if not valid_rrsigs:
             self.plugin.add_status(critical)
+            for rrsig in rrsigs:
+                status = rrsig.get("status")
+                key_tag = rrsig.get("key_tag")
+                self.plugin.add_summary(
+                    f'RRSIG status of query "{query}" is {status} (RRSIG key {key_tag})'
+                )
 
-    def _check_proof(self, proof, query):
-        status = proof.get("status")
+    def _check_proof(self, proofs, query):
+        valid_proofs = [proof for proof in proofs if proof.get("status") in PROOF_STATUS_OK]
 
-        if status not in PROOF_STATUS_OK:
-            self.plugin.add_summary(f'NSEC/NSEC3 status of query "{query}" is {status}')
+        if not valid_proofs:
             self.plugin.add_status(critical)
+            for proof in proofs:
+                status = proof.get("status")
+                self.plugin.add_summary(f'NSEC/NSEC3 status of query "{query}" is {status}')
 
     def get_dnsviz_results(self):
         dnsviz_executable = "/bin/dnsviz"
@@ -130,15 +134,14 @@ class DNSviz:
 
         if answer := query_result.get("answer"):
             if rrsigs := answer[0].get("rrsig"):
-                for rrsig in rrsigs:
-                    self._check_rrsig(rrsig, query)
+                self._check_rrsig(rrsigs, query)
             else:
                 self.plugin.add_summary(f'Answer for query "{query}" is unsigned')
                 self.plugin.add_status(critical)
 
         elif nodata := query_result.get("nodata", query_result.get("nxdomain")):
             if proofs := nodata[0].get("proof"):
-                self._check_proof(proofs[0], query)
+                self._check_proof(proofs, query)
             else:
                 self.plugin.add_summary(
                     f'NODATA/NXDOMAIN answer for query "{query}" does not provide proof of non-existence'
@@ -166,11 +169,13 @@ class DNSviz:
             )
 
         if ds_records := delegation_result.get("ds"):
-            for ds in ds_records:
-                if (ds_status := ds.get("status")) not in DS_STATUS_OK:
-                    self.plugin.add_status(warning)
+            valid_ds_records = [ds_record for ds_record in ds_records if ds_record.get("status") in DS_STATUS_OK]
+
+            if not valid_ds_records:
+                self.plugin.add_status(warning)
+                for ds_record in ds_records:
                     self.plugin.add_summary(
-                        f'DS status for zone "{zone_name}" is {ds_status}'
+                        f'DS status for zone "{zone_name}" is {ds_record.get("status")}'
                     )
 
             if errors := delegation_result.get("errors"):
