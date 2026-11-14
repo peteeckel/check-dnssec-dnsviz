@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/plugins/venv/bin/python3
 
 import argparse
 import json
@@ -43,6 +43,9 @@ class DNSviz:
         return self._debug
 
     def _check_rrsig(self, rrsigs, query):
+        if type(rrsigs) is dict:
+            rrsigs = [rrsigs]
+
         valid_rrsigs = [rrsig for rrsig in rrsigs if rrsig.get("status") in RRSIG_STATUS_OK]
 
         if not valid_rrsigs:
@@ -55,6 +58,9 @@ class DNSviz:
                 )
 
     def _check_proof(self, proofs, query):
+        if type(proofs) is dict:
+            proofs = [proofs]
+            
         valid_proofs = [proof for proof in proofs if proof.get("status") in PROOF_STATUS_OK]
 
         if not valid_proofs:
