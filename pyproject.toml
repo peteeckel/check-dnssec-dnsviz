@@ -25,6 +25,8 @@ classifiers = [
 dependencies = [
     "dnsviz>=0.11.0",
     "pynag",
+    "dnspython",
+    "cryptography",
 ]
 requires-python = ">=3.10"
 
@@ -34,7 +36,7 @@ Repository = "https://github.com/peteeckel/check-dnssec-dnsviz"
 Issues = "https://github.com/peteeckel/check-dnssec-dnsviz/issues"
 
 [project.scripts]
-"check_dnssec_dnsviz.py" = "check_dnssec_dnsviz:main"
+"check_dnssec_dnsviz" = "check_dnssec_dnsviz:main"
 
 [tool.ruff]
 target-version = "py310"
