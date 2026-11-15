@@ -1,0 +1,25 @@
+
+module check-dnssec-dnsviz 1.0;
+
+require {
+	type icinga2_t;
+	type virtual_places_port_t;
+	type unreserved_port_t;
+	type pgpkeyserver_port_t;
+	type bfd_multi_port_t;
+	type snmp_port_t;
+	class udp_socket name_bind;
+	class tcp_socket name_bind;
+}
+
+#============= icinga2_t ==============
+allow icinga2_t bfd_multi_port_t:udp_socket name_bind;
+allow icinga2_t pgpkeyserver_port_t:udp_socket name_bind;
+allow icinga2_t snmp_port_t:udp_socket name_bind;
+
+#!!!! This avc can be allowed using the boolean 'nis_enabled'
+allow icinga2_t unreserved_port_t:tcp_socket name_bind;
+
+#!!!! This avc can be allowed using the boolean 'nis_enabled'
+allow icinga2_t unreserved_port_t:udp_socket name_bind;
+allow icinga2_t virtual_places_port_t:udp_socket name_bind;
