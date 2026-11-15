@@ -304,14 +304,14 @@ def main():
         "-w",
         type=str,
         help="Warning threshold for the expiry time in hours",
-        default="24:",
+        default="72:",
     )
     parser.add_argument(
         "--expire-crit",
         "-c",
         type=str,
         help="Critical threshold for the expiry time in hours",
-        default="12:",
+        default="48:",
     )
     parser.add_argument(
         "--dnsviz",
