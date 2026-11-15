@@ -1,9 +1,11 @@
-#!/opt/plugins/bin/python3
+#!/usr/bin/env python3
 
 import argparse
 import json
 import subprocess
+import sys
 from datetime import datetime as dt
+from pathlib import Path
 
 from pynag.Plugins import PluginHelper, critical, ok, unknown, warning
 
@@ -52,13 +54,24 @@ class RRSIGStats:
 
 
 class DNSviz:
-    def __init__(self, plugin, zone, resolver=None, authoritative=False, debug=False):
+    def __init__(
+        self, plugin, zone, resolver=None, authoritative=False, debug=False, dnsviz=None
+    ):
+        if dnsviz is None:
+            self._dnsviz = str(Path(sys.argv[0]).parent / Path("dnsviz"))
+        else:
+            self._dnsviz = dnsviz
+
         self._plugin = plugin
         self._zone = zone
         self._resolver = resolver
         self._authoritative = authoritative
         self._debug = debug
         self._stats = {}
+
+    @property
+    def dnsviz(self):
+        return self._dnsviz
 
     @property
     def plugin(self):
@@ -126,7 +139,6 @@ class DNSviz:
                 )
 
     def get_dnsviz_results(self):
-        dnsviz_executable = "/opt/plugins/bin/dnsviz"
         probe_arguments = [
             "probe",
             self.zone,
@@ -139,7 +151,7 @@ class DNSviz:
             probe_arguments.append(self.resolver)
 
         probe = subprocess.run(
-            [dnsviz_executable, *probe_arguments],
+            [self.dnsviz, *probe_arguments],
             capture_output=True,
             text=True,
             check=True,
@@ -150,7 +162,7 @@ class DNSviz:
             self.plugin.exit()
 
         grok = subprocess.run(
-            [dnsviz_executable, "grok"],
+            [self.dnsviz, "grok"],
             capture_output=True,
             text=True,
             input=probe.stdout,
@@ -301,6 +313,12 @@ def main():
         help="Critical threshold for the expiry time in hours",
         default="12:",
     )
+    parser.add_argument(
+        "--dnsviz",
+        "-D",
+        type=str,
+        help="Path to the DNSviz command line program",
+    )
 
     args = parser.parse_args()
 
@@ -312,6 +330,7 @@ def main():
         resolver=args.resolver,
         authoritative=args.authoritative,
         debug=args.debug,
+        dnsviz=args.dnsviz,
     )
 
     plugin.add_status(ok)
