@@ -1,10 +1,11 @@
-#!/opt/plugins/venv/bin/python3
+#!/opt/plugins/bin/python3
 
 import argparse
 import json
-from pynag.Plugins import PluginHelper, ok, critical, warning, unknown
-
 import subprocess
+from datetime import datetime as dt
+
+from pynag.Plugins import PluginHelper, critical, ok, unknown, warning
 
 ZONE_STATUS_OK = ("NOERROR",)
 PROOF_STATUS_OK = ("VALID",)
@@ -14,6 +15,42 @@ DELEGATION_STATUS_OK = ("SECURE",)
 DELEGATION_STATUS_WARN = ("INSECURE",)
 
 
+class RRSIGStats:
+    def __init__(self):
+        self._max_expiration = None
+        self._min_inception = None
+
+    @property
+    def max_expiration(self):
+        return self._max_expiration
+
+    @property
+    def min_inception(self):
+        return self._min_inception
+
+    @property
+    def expiration_hours(self):
+        return int((self.max_expiration - dt.now()).total_seconds() / 3600)
+
+    @property
+    def inception_hours(self):
+        return int((dt.now() - self.min_inception).total_seconds() / 3600)
+
+    def update_expiration(self, date):
+        expiration = dt.strptime(date, "%Y-%m-%d %H:%M:%S %Z")
+        if self._max_expiration is None:
+            self._max_expiration = expiration
+        else:
+            self._max_expiration = max(expiration, self._max_expiration)
+
+    def update_inception(self, date):
+        inception = dt.strptime(date, "%Y-%m-%d %H:%M:%S %Z")
+        if self._min_inception is None:
+            self._min_inception = inception
+        else:
+            self._min_inception = min(inception, self._min_inception)
+
+
 class DNSviz:
     def __init__(self, plugin, zone, resolver=None, authoritative=False, debug=False):
         self._plugin = plugin
@@ -21,6 +58,7 @@ class DNSviz:
         self._resolver = resolver
         self._authoritative = authoritative
         self._debug = debug
+        self._stats = {}
 
     @property
     def plugin(self):
@@ -42,13 +80,27 @@ class DNSviz:
     def debug(self):
         return self._debug
 
+    @property
+    def stats(self):
+        return self._stats
+
     def _check_rrsig(self, rrsigs, query):
         if type(rrsigs) is dict:
             rrsigs = [rrsigs]
 
-        valid_rrsigs = [rrsig for rrsig in rrsigs if rrsig.get("status") in RRSIG_STATUS_OK]
+        valid_rrsigs = [
+            rrsig for rrsig in rrsigs if rrsig.get("status") in RRSIG_STATUS_OK
+        ]
 
-        if not valid_rrsigs:
+        if valid_rrsigs:
+            for rrsig in valid_rrsigs:
+                signer = rrsig.get("signer")
+                if signer not in self.stats:
+                    self.stats[signer] = RRSIGStats()
+
+                self.stats[signer].update_expiration(rrsig.get("expiration"))
+                self.stats[signer].update_inception(rrsig.get("inception"))
+        else:
             self.plugin.add_status(critical)
             for rrsig in rrsigs:
                 status = rrsig.get("status")
@@ -60,17 +112,21 @@ class DNSviz:
     def _check_proof(self, proofs, query):
         if type(proofs) is dict:
             proofs = [proofs]
-            
-        valid_proofs = [proof for proof in proofs if proof.get("status") in PROOF_STATUS_OK]
+
+        valid_proofs = [
+            proof for proof in proofs if proof.get("status") in PROOF_STATUS_OK
+        ]
 
         if not valid_proofs:
             self.plugin.add_status(critical)
             for proof in proofs:
                 status = proof.get("status")
-                self.plugin.add_summary(f'NSEC/NSEC3 status of query "{query}" is {status}')
+                self.plugin.add_summary(
+                    f'NSEC/NSEC3 status of query "{query}" is {status}'
+                )
 
     def get_dnsviz_results(self):
-        dnsviz_executable = "/bin/dnsviz"
+        dnsviz_executable = "/opt/plugins/bin/dnsviz"
         probe_arguments = [
             "probe",
             self.zone,
@@ -86,6 +142,7 @@ class DNSviz:
             [dnsviz_executable, *probe_arguments],
             capture_output=True,
             text=True,
+            check=True,
         )
         if probe.returncode:
             self.plugin.add_status(unknown)
@@ -97,6 +154,7 @@ class DNSviz:
             capture_output=True,
             text=True,
             input=probe.stdout,
+            check=True,
         )
         if grok.returncode:
             self.plugin.add_status(unknown)
@@ -175,7 +233,11 @@ class DNSviz:
             )
 
         if ds_records := delegation_result.get("ds"):
-            valid_ds_records = [ds_record for ds_record in ds_records if ds_record.get("status") in DS_STATUS_OK]
+            valid_ds_records = [
+                ds_record
+                for ds_record in ds_records
+                if ds_record.get("status") in DS_STATUS_OK
+            ]
 
             if not valid_ds_records:
                 self.plugin.add_status(warning)
@@ -225,6 +287,20 @@ def main():
         action="store_true",
         help="Use the authoritative servers for the zone",
     )
+    parser.add_argument(
+        "--expire-warn",
+        "-w",
+        type=str,
+        help="Warning threshold for the expiry time in hours",
+        default="24:",
+    )
+    parser.add_argument(
+        "--expire-crit",
+        "-c",
+        type=str,
+        help="Critical threshold for the expiry time in hours",
+        default="12:",
+    )
 
     args = parser.parse_args()
 
@@ -241,6 +317,25 @@ def main():
     plugin.add_status(ok)
 
     dnsviz.check_dnssec()
+
+    for signer, stats in dnsviz.stats.items():
+        if signer == ".":
+            zone_label = "root"
+        else:
+            zone_label = signer.rstrip(".").replace(".", "_")
+
+        plugin.add_metric(
+            label=f"{zone_label}_expiration_hours",
+            value=stats.expiration_hours,
+            uom="h",
+            warn=args.expire_warn,
+            crit=args.expire_crit,
+        )
+        plugin.add_metric(
+            label=f"{zone_label}_inception_hours", value=stats.inception_hours, uom="h"
+        )
+
+    plugin.check_all_metrics()
 
     if plugin.get_status() == ok:
         plugin.add_summary("DNSSEC status is OK")
