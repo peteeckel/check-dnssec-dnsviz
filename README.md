@@ -1,4 +1,4 @@
-# check_dnssec_dnsviz - Check the DNSSEC status for a DNS zone
+# check_dnssec_dnsviz - Check the DNSSEC status of a DNS zone
 
 This is a check script for checking the DNSSEC status of a DNS zone using the instrumentation provided by the [DNSviz](https://github.com/dnsviz/dnsviz) project.
 
