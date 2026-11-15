@@ -1,6 +1,6 @@
 [project]
 name= "check-dnssec-dnsviz"
-version = "0.0.1"
+version = "0.0.2"
 description  = "A monitoring plugin for checking DNSSEC zones using DNSviz"
 keywords = ["DNS",  "dnsviz",  "Nagios",  "Icinga", "plugin", "check" ]
 authors = [
