@@ -58,7 +58,7 @@ class DNSviz:
         self, plugin, zone, resolver=None, authoritative=False, debug=False, dnsviz=None
     ):
         if dnsviz is None:
-            self._dnsviz = str(Path(sys.argv[0]).parent / Path("dnsviz"))
+            self._dnsviz = str(Path(sys.argv[0]).resolve().parent / Path("dnsviz"))
         else:
             self._dnsviz = dnsviz
 
