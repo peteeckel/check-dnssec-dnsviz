@@ -1,0 +1,56 @@
+[project]
+name= "check-dnssec-dnsviz"
+version = "0.0.1"
+description  = "A monitoring plugin for checking DNSSEC zones using DNSviz"
+keywords = ["DNS",  "dnsviz",  "Nagios",  "Icinga", "plugin", "check" ]
+authors = [
+    {name = "Peter Eckel", email = "pe@sys4.de"}
+]
+readme = "README.md"
+license = "MIT"
+license-files = [
+    "LICENSE"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Natural Language :: English",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "dnsviz>=0.11.0",
+    "dnspython>=2.0.0",
+    "cryptography>=0.10.0",
+    "nagiosplugin>=1.4.0",
+]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/peteeckel/check-dnssec-dnsviz"
+Repository = "https://github.com/peteeckel/check-dnssec-dnsviz"
+Issues = "https://github.com/peteeckel/check-dnssec-dnsviz/issues"
+
+[project.scripts]
+"check_dnssec_dnsviz.py" = "check_dnssec_dnsviz:main"
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W", "C", "RET", "UP", "I"]
+ignore = ["F403", "C901"]
+preview = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[build-system]
+requires = ['setuptools']
+build-backend = 'setuptools.build_meta'
