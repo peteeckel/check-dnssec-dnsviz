@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse
 import json
 import subprocess
@@ -211,7 +209,7 @@ class DNSviz:
         if answer := query_result.get("answer"):
             if rrsigs := answer[0].get("rrsig"):
                 self._check_rrsig(rrsigs, query)
-            else:
+            elif answer[0].get("type") != "DS":
                 self.plugin.add_summary(f'Answer for query "{query}" is unsigned')
                 self.plugin.add_status(critical)
 
