@@ -38,6 +38,12 @@ Issues = "https://github.com/peteeckel/check-dnssec-dnsviz/issues"
 [project.scripts]
 "check_dnssec_dnsviz" = "check_dnssec_dnsviz:main"
 
+[tool.setuptools]
+packages = [
+    "check_dnssec_dnsviz",
+]
+package-data = {"check_dnssec_dnsviz" = ["*.py"]}
+
 [tool.ruff]
 target-version = "py310"
 
