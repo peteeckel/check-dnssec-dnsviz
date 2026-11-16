@@ -1,0 +1,24 @@
+name: Lint
+
+on:
+  - push
+  - pull_request
+
+permissions:
+  contents: read
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+
+          - name: Run the ruff code checker
+            uses: astral-sh/ruff-action@6776b969097d5da0423e7ed8bbda68e2c8b92b60
+
+          - name: Check conformance to Ruff formatting standards
+            uses: astral-sh/ruff-action@6776b969097d5da0423e7ed8bbda68e2c8b92b60
+            with:
+                args: "format --check --diff"
